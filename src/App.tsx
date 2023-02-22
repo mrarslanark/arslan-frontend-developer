@@ -1,12 +1,23 @@
 import { useEffect, useState } from "react";
 import { makeUnique } from "./utils";
+import dayjs from "dayjs";
+import LocalizedFormat from "dayjs/plugin/localizedFormat";
+
+dayjs.extend(LocalizedFormat);
 
 function App() {
   const [capsules, setCapsules] = useState([]);
+  const [filteredData, setFilteredData] = useState([]);
+
+  const [isFilterActive, setFilterActive] = useState(false);
 
   const [statuses, setStatuses] = useState<any>([]);
   const [launches, setLaunches] = useState<any>([]);
   const [types, setTypes] = useState<any>([]);
+
+  const [selectedStatus, setSelectedStatus] = useState("");
+  const [selectedLaunchDate, setSelectedLaunchDate] = useState("");
+  const [selectedType, setSelectedType] = useState("");
 
   useEffect(() => {
     getCapsules();
@@ -27,16 +38,71 @@ function App() {
       setLaunches(uniqueLaunches);
       setTypes(uniqueTypes);
       setCapsules(json);
+      setFilteredData(json);
     } catch (err) {
       console.error(err);
     }
   }
 
+  function handleStatusSelect(e: React.ChangeEvent<HTMLSelectElement>) {
+    e.preventDefault();
+    setSelectedStatus(e.target.value);
+  }
+
+  function handleLaunchDateSelect(e: React.ChangeEvent<HTMLSelectElement>) {
+    e.preventDefault();
+    setSelectedLaunchDate(e.target.value);
+  }
+
+  function handleTypeSelect(e: React.ChangeEvent<HTMLSelectElement>) {
+    e.preventDefault();
+    setSelectedType(e.target.value);
+  }
+
+  async function handleFilterApply(
+    e: React.MouseEvent<HTMLButtonElement, MouseEvent>
+  ) {
+    e.preventDefault();
+    setFilterActive(true);
+    const url = new URL("", process.env.REACT_APP_DATASET_URL as string);
+    const avoid = "default";
+
+    if (selectedStatus && selectedStatus !== avoid) {
+      url.searchParams.set("status", selectedStatus);
+    }
+
+    if (selectedLaunchDate && selectedLaunchDate !== avoid) {
+      url.searchParams.set("original_launch", selectedLaunchDate);
+    }
+
+    if (selectedType && selectedType !== avoid) {
+      url.searchParams.set("type", selectedType);
+    }
+
+    const res = await fetch(url.toString());
+    if (!res.ok) {
+      throw new Error("Unable to fetch data from SpaceX Data Center");
+    }
+    const json = await res.json();
+    setFilteredData(json);
+  }
+
+  function clearFilters(e: React.MouseEvent<HTMLButtonElement, MouseEvent>) {
+    e.preventDefault();
+    setSelectedLaunchDate("");
+    setSelectedStatus("");
+    setSelectedType("");
+    setFilteredData(capsules);
+  }
+
+  const validateFilters =
+    selectedType === "" && selectedStatus === "" && selectedLaunchDate === "";
+
   return (
     <>
       {/* Header */}
       <header>
-        <h1>RocketX</h1>
+        <h1>SpaceX</h1>
       </header>
       {/* Banner */}
       <section>
@@ -52,51 +118,67 @@ function App() {
       {/* Search Bar */}
       <section>
         <form>
-          <div>
-            <input type="text" name="text" placeholder="Search Capsules" />
-            <input type="submit" name="submit" value="Search" />
-          </div>
-          <p>Filters</p>
+          <p>Filters Capsules</p>
           {statuses ? (
-            <select>
-              <option disabled selected color="gray">
-                Select Status
-              </option>
+            <select
+              onChange={handleStatusSelect}
+              value={selectedStatus ?? "default"}
+            >
+              <option value="default">Choose Status</option>
               {statuses.sort().map((status: string) => (
-                <option key={status}>{status}</option>
+                <option key={status} value={status}>
+                  {status}
+                </option>
               ))}
             </select>
           ) : null}
           {launches ? (
-            <select>
-              <option disabled selected color="gray">
-                Select Original Launch Date
-              </option>
+            <select
+              onChange={handleLaunchDateSelect}
+              value={selectedLaunchDate}
+            >
+              <option value="default">Choose Launch Date</option>
               {launches.sort().map((launch: string) => (
-                <option key={launch}>{launch}</option>
+                <option key={launch} value={launch}>
+                  {launch ? dayjs(launch).format("LL") : "Unknown"}
+                </option>
               ))}
             </select>
           ) : null}
           {types ? (
-            <select>
-              <option disabled selected color="gray">
-                Select Type
-              </option>
+            <select onChange={handleTypeSelect} value={selectedType}>
+              <option value="default">Choose Type</option>
               {types.sort().map((type: string) => (
-                <option key={type}>{type}</option>
+                <option key={type} value={type}>
+                  {type}
+                </option>
               ))}
             </select>
+          ) : null}
+          <button onClick={handleFilterApply} disabled={validateFilters}>
+            Apply
+          </button>
+          {isFilterActive ? (
+            <button onClick={clearFilters}>Clear Filters</button>
           ) : null}
         </form>
       </section>
       {/* Data Grid */}
       <section>
-        {capsules
-          ? capsules.map((capsule: any) => {
+        {filteredData
+          ? filteredData.map((capsule: any) => {
               return (
-                <div key={capsule.capsule_id}>
+                <div key={capsule.capsule_serial}>
                   <h4>{capsule.capsule_serial}</h4>
                   <p>{capsule.details ?? "Details unavailable"}</p>
+                  <p>Status: {capsule.status}</p>
+                  <p>
+                    Original Launch:{" "}
+                    {capsule.original_launch
+                      ? dayjs(capsule.original_launch).format("LL")
+                      : "Unknown"}
+                  </p>
+                  <p>Type: {capsule.type}</p>
                 </div>
               );
             })
